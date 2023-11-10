@@ -28,6 +28,7 @@ class AnsibleBackend(base.BaseBackend):
         self,
         host: str,
         ansible_inventory: Optional[str] = None,
+        subset: Optional[str] = None,
         ssh_config: Optional[str] = None,
         ssh_identity_file: Optional[str] = None,
         force_ansible: bool = False,
@@ -36,6 +37,7 @@ class AnsibleBackend(base.BaseBackend):
     ):
         self.host = host
         self.ansible_inventory = ansible_inventory
+        self.subset = subset
         self.ssh_config = ssh_config
         self.ssh_identity_file = ssh_identity_file
         self.force_ansible = force_ansible
@@ -43,7 +45,7 @@ class AnsibleBackend(base.BaseBackend):
 
     @property
     def ansible_runner(self) -> AnsibleRunner:
-        return AnsibleRunner.get_runner(self.ansible_inventory)
+        return AnsibleRunner.get_runner(self.ansible_inventory, self.subset)
 
     def run(self, command: str, *args: str, **kwargs: Any) -> base.CommandResult:
         command = self.get_command(command, *args)
@@ -87,4 +89,5 @@ class AnsibleBackend(base.BaseBackend):
     @classmethod
     def get_hosts(cls, host: str, **kwargs: Any) -> list[str]:
         inventory = kwargs.get("ansible_inventory")
-        return AnsibleRunner.get_runner(inventory).get_hosts(host or "all")
+        subset = kwargs.get("subset")
+        return AnsibleRunner.get_runner(inventory, subset).get_hosts(host or "all")

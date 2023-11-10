@@ -49,7 +49,9 @@ Inventory = dict[str, Any]
 
 
 def get_ansible_inventory(
-    config: configparser.ConfigParser, inventory_file: Optional[str]
+    config: configparser.ConfigParser,
+    inventory_file: Optional[str],
+    subset: Optional[str],
 ) -> Inventory:
     # Disable ansible verbosity to avoid
     # https://github.com/ansible/ansible/issues/59973
@@ -58,6 +60,9 @@ def get_ansible_inventory(
     if inventory_file:
         cmd += " -i %s"
         args += [inventory_file]
+    if subset:
+        cmd += " --limit %s"
+        args += [subset]
     return json.loads(local.check_output(cmd, *args))  # type: ignore[no-any-return]
 
 
@@ -273,8 +278,11 @@ class AnsibleRunner:
         },
     }
 
-    def __init__(self, inventory_file: Optional[str] = None):
+    def __init__(
+        self, inventory_file: Optional[str] = None, subset: Optional[str] = None
+    ):
         self.inventory_file = inventory_file
+        self.subset = subset
         self._host_cache: dict[str, Optional[testinfra.host.Host]] = {}
         super().__init__()
 
@@ -285,7 +293,9 @@ class AnsibleRunner:
             # empty inventory should not return any hosts except for localhost
             if pattern == "localhost":
                 result.add("localhost")
-            else:
+            # If a subset of the invenory was requested, we shouldn't consider
+            # that an empty inventory is an error.
+            elif not self.subset:
                 raise RuntimeError(
                     "No inventory was parsed (missing file ?), "
                     "only implicit localhost is available"
@@ -302,7 +312,9 @@ class AnsibleRunner:
 
     @functools.cached_property
     def inventory(self) -> Inventory:
-        return get_ansible_inventory(self.ansible_config, self.inventory_file)
+        return get_ansible_inventory(
+            self.ansible_config, self.inventory_file, self.subset
+        )
 
     @functools.cached_property
     def ansible_config(self) -> configparser.ConfigParser:
@@ -412,9 +424,12 @@ class AnsibleRunner:
                     return json.load(f)
 
     @classmethod
-    def get_runner(cls, inventory: Optional[str]) -> "AnsibleRunner":
+    def get_runner(
+        cls, inventory: Optional[str], subset: Optional[str]
+    ) -> "AnsibleRunner":
+        item = (inventory, subset)
         try:
-            return cls._runners[inventory]
+            return cls._runners[item]
         except KeyError:
-            cls._runners[inventory] = cls(inventory)
-            return cls._runners[inventory]
+            cls._runners[item] = cls(inventory, subset)
+            return cls._runners[item]
